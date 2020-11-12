@@ -1,0 +1,107 @@
+cd ~/environment
+git clone https://github.com/worstcasebc/flaskserver.git
+
+cd
+mkdir tmp
+cd tmp
+
+curl -o aws-iam-authenticator \
+https://amazon-eks.s3.us-west-2.amazonaws.com/1.18.8/2020-09-18/bin/linux/amd64/aws-iam-authenticator
+
+chmod +x ./aws-iam-authenticator
+sudo mv ./aws-iam-authenticator /usr/local/bin
+aws-iam-authenticator help
+
+aws configure
+
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+export PATH=/usr/local/bin:$PATH
+sudo rm /usr/bin/aws*
+aws --version
+
+curl --silent \
+--location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" \
+| tar xz -C /tmp
+
+sudo mv /tmp/eksctl /usr/local/bin
+eksctl version
+
+curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.18.8/2020-09-18/bin/linux/amd64/kubectl
+
+chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin
+kubectl version --short --client
+
+eksctl create cluster --name HandsOnCluster --version=1.18 --region=eu-central-1 --fargate
+
+kubectl create deployment flask --image=<ACCOUNT-ID>.dkr.ecr.eu-central-1.amazonaws.com/flaskserver:v2
+kubectl expose deployment flask --port=80 --target-port=5000
+eksctl utils associate-iam-oidc-provider --region eu-central-1 --cluster HandsOnCluster --approve
+
+cd ~/tmp
+
+curl -o iam-policy.json \
+https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.1.8/docs/examples/iam-policy.json
+
+aws iam create-policy --policy-name ALBIngressControllerIAMPolicy --policy-document file://iam-policy.json
+
+kubectl apply -f \
+https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.1.8/docs/examples/rbac-role.yaml
+
+eksctl create iamserviceaccount \
+--region eu-central-1 \
+--name alb-ingress-controller \
+--namespace kube-system \
+--cluster HandsOnCluster \
+--attach-policy-arn arn:aws:iam::<ACCOUNT-ID>:policy/ALBIngressControllerIAMPolicy \
+--override-existing-serviceaccounts \
+--approve
+
+kubectl apply -f \
+https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.1.8/docs/examples/alb-ingress-controller.yaml
+
+aws ec2 describe-vpcs | grep VpcId
+
+kubectl edit deployment.apps/alb-ingress-controller -n kube-system
+    - --cluster-name=HandsOnCluster
+    - --aws-vpc-id=<vpc-id>
+    - --aws-region=eu-central-1
+
+cd ~/environment/flaskserver/kubernetes
+kubectl apply -f fargate-eks-ALB-Ingress.yaml
+
+aws elbv2 describe-load-balancers | grep DNSName
+
+kubectl scale deployment flask --replicas=3
+kubectl get pods
+kubectl describe pod <pod> | grep Node:
+kubectl describe node/<node>
+
+
+------------------------------------------------------------------------------------------------
+
+kubectl scale deployment flask --replicas=0
+
+kubectl delete service,deployment flask
+eksctl delete fargateprofile --cluster HandsOnCluster --name fp-default --wait
+
+aws elbv2 describe-load-balancers | grep LoadBalancerArn
+aws elbv2 describe-listeners --load-balancer-arn <load-balancer-arn> | grep ListenerArn
+aws elbv2 describe-target-groups --load-balancer-arn <load-balanver-arn> | grep TargetGroupArn
+aws elbv2 delete-listener --listener-arn <listener-arn>
+aws elbv2 delete-target-group --target-group-arn <target-group-arn>
+aws elbv2 delete-load-balancer --load-balancer-arn <load-balancer-arn>
+
+aws ec2 describe-security-groups --filters Name=tag-value,Values=HandsOnCluster | grep GroupId
+aws ec2 delete-security-group --group-id <security-group-id>
+
+aws cloudformation delete-stack \
+    --stack-name eksctl-HandsOnCluster-addon-iamserviceaccount-kube-system-alb-ingress-controller
+
+aws cloudformation delete-stack \
+    --stack-name eksctl-HandsOnCluster-addon-iamserviceaccount-kube-system-aws-node
+    
+aws cloudformation delete-stack \
+    --stack-name eksctl-HandsOnCluster-cluster
