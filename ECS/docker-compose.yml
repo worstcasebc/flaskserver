@@ -1,7 +1,7 @@
 version: '3'
 services:
   web:
-    image: 502075598954.dkr.ecr.eu-central-1.amazonaws.com/flaskserver:v2
+    image: <ACCOUNTID>.dkr.ecr.eu-central-1.amazonaws.com/flaskserver:v2
     ports:
       - "5000:5000"
     logging:
