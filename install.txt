@@ -1,44 +1,108 @@
 cd ~/environment
+
 git clone https://github.com/worstcasebc/flaskserver.git
 
 cd
+
 mkdir tmp
+
 cd tmp
+
+---------------------------------------------------------------------------------------------------
 
 curl -o aws-iam-authenticator \
 https://amazon-eks.s3.us-west-2.amazonaws.com/1.18.8/2020-09-18/bin/linux/amd64/aws-iam-authenticator
 
 chmod +x ./aws-iam-authenticator
+
 sudo mv ./aws-iam-authenticator /usr/local/bin
+
 aws-iam-authenticator help
+
+---------------------------------------------------------------------------------------------------
 
 aws configure
 
+---------------------------------------------------------------------------------------------------
+
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+
 unzip awscliv2.zip
+
 sudo ./aws/install
+
 export PATH=/usr/local/bin:$PATH
+
 sudo rm /usr/bin/aws*
+
 aws --version
+
+---------------------------------------------------------------------------------------------------
+
+cd ~/environment/flaskserver
+
+docker images
+
+docker rmi <nodejs8.10> and <python2.7>
+
+docker build -t <ACCOUNTID>.dkr.ecr.eu-central-1.amazonaws.com/flaskserver:v1 .
+
+docker images
+
+docker run --name some-flask -p 5000:5000 -d <ACCOUNTID>.dkr.ecr.eu-central-1.amazonaws.com/flaskserver:v1
+
+docker ps
+
+curl localhost:5000
+
+docker stop some-flask
+
+---------------------------------
+
+aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin \
+<ACCOUNTID>.dkr.ecr.eu-central-1.amazonaws.com
+
+aws ecr describe-repositories 
+
+aws ecr create-repository --repository-name flaskserver
+
+docker push <ACCOUNTID>.dkr.ecr.eu-central-1.amazonaws.com/flaskserver:v1
+
+---------------------------------------------------------------------------------------------------
 
 curl --silent \
 --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" \
 | tar xz -C /tmp
 
 sudo mv /tmp/eksctl /usr/local/bin
+
 eksctl version
+
+---------------------------------
 
 curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.18.8/2020-09-18/bin/linux/amd64/kubectl
 
 chmod +x ./kubectl
+
 sudo mv ./kubectl /usr/local/bin
+
 kubectl version --short --client
+
+---------------------------------------------------------------------------------------------------
 
 eksctl create cluster --name HandsOnCluster --version=1.18 --region=eu-central-1 --fargate
 
-kubectl create deployment flask --image=<ACCOUNT-ID>.dkr.ecr.eu-central-1.amazonaws.com/flaskserver:v2
+kubectl create deployment flask --image=<ACCOUNT-ID>.dkr.ecr.eu-central-1.amazonaws.com/flaskserver:v1
+
+kubectl get pods
+
 kubectl expose deployment flask --port=80 --target-port=5000
+
+---------------------------------
+
 eksctl utils associate-iam-oidc-provider --region eu-central-1 --cluster HandsOnCluster --approve
+
+aws eks describe-cluster --name HandsOnCluster --query "cluster.identity.oidc.issuer" --output text
 
 cd ~/tmp
 
@@ -70,28 +134,40 @@ kubectl edit deployment.apps/alb-ingress-controller -n kube-system
     - --aws-region=eu-central-1
 
 cd ~/environment/flaskserver/kubernetes
+
 kubectl apply -f fargate-eks-ALB-Ingress.yaml
 
 aws elbv2 describe-load-balancers | grep DNSName
 
+---------------------------------------------------------------------------------------------------
+
 kubectl scale deployment flask --replicas=3
+
 kubectl get pods
+
 kubectl describe pod <pod> | grep Node:
+
 kubectl describe node/<node>
 
-
-------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 
 kubectl scale deployment flask --replicas=0
 
 kubectl delete service,deployment flask
+
 eksctl delete fargateprofile --cluster HandsOnCluster --name fp-default --wait
 
 aws elbv2 describe-load-balancers | grep LoadBalancerArn
+
 aws elbv2 describe-listeners --load-balancer-arn <load-balancer-arn> | grep ListenerArn
+
 aws elbv2 describe-target-groups --load-balancer-arn <load-balanver-arn> | grep TargetGroupArn
+
 aws elbv2 delete-listener --listener-arn <listener-arn>
+
 aws elbv2 delete-target-group --target-group-arn <target-group-arn>
+
 aws elbv2 delete-load-balancer --load-balancer-arn <load-balancer-arn>
 
 aws ec2 describe-security-groups --filters Name=tag-value,Values=HandsOnCluster | grep GroupId
