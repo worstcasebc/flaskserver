@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template
 import socket
 
 server = Flask(__name__)
@@ -8,7 +8,7 @@ server = Flask(__name__)
 def hello():
     host_name = socket.gethostname()
     host_ip = socket.gethostbyname(host_name)
-    return "My hostname is " + host_name + " [" + host_ip + "]"
+    return render_template("index.html", host=host_name, ip=host_ip)
 
 
 if __name__ == "__main__":
