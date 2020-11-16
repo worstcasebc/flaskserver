@@ -21,7 +21,7 @@ aws-iam-authenticator help
 
 ---------------------------------------------------------------------------------------------------
 
-aws configure
+aws configure # after entering your access key, region and output-format (json), cancel the update and deactivate it permanently
 
 ---------------------------------------------------------------------------------------------------
 
